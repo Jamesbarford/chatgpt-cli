@@ -203,16 +203,6 @@ void openAiCtxSetFlags(openAiCtx *ctx, int flags) {
     ctx->flags |= flags;
 }
 
-static aoStr *openAiPutMessage(aoStr *payload, char *msg, size_t len, int role,
-                               char end_char) {
-    aoStrCatPrintf(payload, "{\"role\": \"%s\", \"content\": \"",
-                   role_to_str[role]);
-    aoStrCatLen(payload, msg, len);
-    aoStrCatLen(payload, "\"}", 2);
-    aoStrPutChar(payload, end_char);
-    return payload;
-}
-
 static void openAiAppendOptionsToPayload(openAiCtx *ctx, aoStr *payload,
                                          char *user_msg) {
     aoStrCatPrintf(payload, "{\"model\": \"%s\"", ctx->model);
@@ -237,15 +227,12 @@ static void openAiAppendOptionsToPayload(openAiCtx *ctx, aoStr *payload,
         aoStrCatLen(payload, ",\"messages\": [", 14);
         for (size_t i = 0; i < ctx->chat_len; ++i) {
             openAiMessage *msg = &ctx->chat_history[i];
-            payload = openAiPutMessage(payload, aoStrGetData(msg->content),
-                                       aoStrLen(msg->content), msg->role, ',');
+            aoStrCatPrintf(payload, "{\"role\": \"%s\", \"content\": \"%s\"},",
+                           role_to_str[msg->role], aoStrGetData(msg->content));
         }
-        payload = openAiPutMessage(payload, user_msg, strlen(user_msg),
-                                   OPEN_AI_ROLE_USER, ']');
-    } else {
-        payload = openAiPutMessage(payload, user_msg, strlen(user_msg),
-                                   OPEN_AI_ROLE_USER, ']');
     }
+    aoStrCatPrintf(payload, "{\"role\": \"%s\", \"content\": \"%s\"}]",
+                   role_to_str[OPEN_AI_ROLE_USER], user_msg);
 }
 
 void openAiCtxDbInit(openAiCtx *ctx) {
@@ -438,6 +425,10 @@ static size_t openAiChatStreamCallback(char *stream, size_t size, size_t nmemb,
     int count = 0;
     json *j, *sel, *choices = NULL;
 
+    if ((*ctx)->flags & OPEN_AI_FLAG_VERBOSE) {
+        printf("%s\n", stream);
+    }
+
     if (*stream == '{') {
         j = jsonParseWithLen(stream, rbytes);
         if ((sel = jsonSelect(j, ".error.message")) != NULL) {
@@ -494,12 +485,17 @@ static size_t openAiChatStreamCallback(char *stream, size_t size, size_t nmemb,
 void openAiChatStream(openAiCtx *ctx, char *msg) {
     aoStr *payload = aoStrAlloc(512);
     size_t msg_len = strlen(msg);
+    /* msg gets freed by the caller */
+    aoStr *ref = aoStrFromString(msg, msg_len);
     aoStr *user_mesage = aoStrDupRaw(msg, msg_len, msg_len);
     aoStr *user_escaped_msg = NULL, *assistant_escaped_msg = NULL;
     int http_ok = 0;
 
-    openAiAppendOptionsToPayload(ctx, payload, msg);
-    aoStrCatPrintf(payload, ",\"stream\": true}");
+    user_escaped_msg = aoStrEscapeString(ref);
+    free(ref);
+
+    openAiAppendOptionsToPayload(ctx, payload, user_escaped_msg->data);
+    aoStrCat(payload, ",\"stream\": true}");
 
     if (ctx->flags & OPEN_AI_FLAG_VERBOSE) {
         printf("%s\n", aoStrGetData(payload));
@@ -511,7 +507,6 @@ void openAiChatStream(openAiCtx *ctx, char *msg) {
                                  ctx->auth_headers, payload, (void **)&ctx,
                                  openAiChatStreamCallback, ctx->flags);
     printf("\n\n");
-    user_escaped_msg = aoStrEscapeString(user_mesage);
     assistant_escaped_msg = aoStrEscapeString(ctx->tmp_buffer);
 
     /* Store in history */
@@ -530,23 +525,25 @@ void openAiChatStream(openAiCtx *ctx, char *msg) {
     aoStrSetLen(ctx->tmp_buffer, 0);
 }
 
-/*
- * curl https://api.openai.com/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer $OPENAI_API_KEY" \
-  -d '{
-    "model": "gpt-3.5-turbo",
-    "messages": [
-      {
-        "role": "system",
-        "content": "You are a helpful assistant."
-      },
-      {
-        "role": "user",
-        "content": "Hello!"
-      }
-    ]
-  }'
+/**
+ * {
+  "id": "chatcmpl-123",
+  "object": "chat.completion",
+  "created": 1677652288,
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "\n\nHello there, how may I assist you today?",
+    },
+    "finish_reason": "stop"
+  }],
+  "usage": {
+    "prompt_tokens": 9,
+    "completion_tokens": 12,
+    "total_tokens": 21
+  }
+}
  */
 json *openAiChat(openAiCtx *ctx, char *msg) {
     aoStr *payload = aoStrAlloc(512);

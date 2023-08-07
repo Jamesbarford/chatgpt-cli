@@ -45,6 +45,7 @@ aoStr *ioReadFile(char *path) {
         close(fd);
         return NULL;
     }
+    buffer[len] = '\0';
 
     close(fd);
 

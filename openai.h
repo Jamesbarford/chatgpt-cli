@@ -17,6 +17,7 @@
 #define OPEN_AI_FLAG_VERBOSE (1)
 #define OPEN_AI_FLAG_HISTORY (2)
 #define OPEN_AI_FLAG_PERSIST (4)
+#define OPEN_AI_FLAG_STREAM  (8)
 
 #define OPEN_AI_ROLE_USER      (0)
 #define OPEN_AI_ROLE_ASSISTANT (1)

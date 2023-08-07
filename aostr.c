@@ -258,21 +258,20 @@ void aoStrCatPrintf(aoStr *b, const char *fmt, ...) {
     va_start(ap, fmt);
 
     /* Probably big enough */
-    int min_len = 512;
+    size_t min_len = 512;
     size_t bufferlen = strlen(fmt) * 3;
     bufferlen = bufferlen > min_len ? bufferlen : min_len;
-    size_t next_len = 0;
+    size_t len = 0;
     char *buf = (char *)malloc(sizeof(char) * bufferlen);
 
     while (1) {
-        buf[bufferlen - 2] = '\0';
         va_copy(copy, ap);
-        next_len = vsnprintf(buf, bufferlen, fmt, ap);
+        len = vsnprintf(buf, bufferlen, fmt, copy);
         va_end(copy);
 
-        if (next_len >= bufferlen) {
+        if (len >= bufferlen) {
             free(buf);
-            bufferlen = next_len + 1;
+            bufferlen = len + 1;
             buf = malloc(bufferlen);
             if (buf == NULL) {
                 return;
@@ -282,7 +281,7 @@ void aoStrCatPrintf(aoStr *b, const char *fmt, ...) {
         break;
     }
 
-    aoStrCatLen(b, buf, strlen(buf));
+    aoStrCatLen(b, buf, len);
     free(buf);
     va_end(ap);
 }

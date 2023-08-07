@@ -19,6 +19,7 @@ OBJS = $(OUT)/main.o \
 	   $(OUT)/list.o \
 	   $(OUT)/io.o \
 	   $(OUT)/sql.o \
+	   $(OUT)/prompt.o \
 	   $(OUT)/openai.o \
 	   $(OUT)/linenoise.o \
 	   $(OUT)/json-selector.o
@@ -61,6 +62,10 @@ $(OUT)/list.o: \
 $(OUT)/io.o: \
 	./io.c \
 	./io.h
+
+$(OUT)/prompt.o: \
+	./prompt.c \
+	./prompt.h
 
 $(OUT)/sql.o: \
 	./sql.c \
