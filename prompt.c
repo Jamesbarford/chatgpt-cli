@@ -1,5 +1,3 @@
-#include <sys/fcntl.h>
-
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -139,9 +137,9 @@ static void commandChatF(openAiCtx *ctx, char *line) {
     char *ptr = line + 6; /* skip /chatf */
     char path[BUFSIZ], cmd[BUFSIZ];
     ssize_t pathlen = 0, cmdlen = 0;
-    aoStr *file_contents, *escaped_contents;
+    aoStr *file_contents;
 
-    if (*ptr == '\0' || *ptr != ' ') {
+    if (*ptr == '\0' || !isspace(*ptr)) {
         prompt_warning("Usage: /chatf <file> <cmd>\n");
         return;
     }
@@ -167,14 +165,9 @@ static void commandChatF(openAiCtx *ctx, char *line) {
         return;
     }
 
-    escaped_contents = aoStrEscapeString(file_contents);
-
-    aoStrCatLen(cmdbuffer, cmd, pathlen);
-    aoStrCatLen(cmdbuffer, ": ", 2);
-    aoStrCatLen(cmdbuffer, file_contents->data, file_contents->len);
+    aoStrCatPrintf(cmdbuffer, "%s : \n ```\n%s\n```", cmd, file_contents->data);
     openAiChatStream(ctx, cmdbuffer->data);
     aoStrRelease(file_contents);
-    aoStrRelease(escaped_contents);
     aoStrRelease(cmdbuffer);
 }
 
@@ -210,11 +203,11 @@ static void commandChatRename(openAiCtx *ctx, char *line) {
         return;
     }
     ptr = line + 12;
-    if (*ptr != ' ') {
+    if (!isspace(*ptr)) {
         warning("Usage: /chat rename <name_of_chat>\n");
         return;
     }
-    ptr += 2;
+    ptr++;;
     while (*ptr != '\0') {
         newname[newlen++] = *ptr++;
     }
@@ -227,12 +220,12 @@ static void commandChatLoad(openAiCtx *ctx, char *line) {
     char *ptr = line + 10;
     int chat_id = -1;
 
-    if (*ptr != ' ') {
+    if (!isspace(*ptr)) {
         prompt_warning("Usage: /chat load <chat_id>\n");
         return;
     }
 
-    ptr += 2;
+    ptr++;
 
     while (!isdigit(*ptr) && *ptr != '\0') {
         ptr++;
@@ -257,11 +250,11 @@ static void commandSetModel(openAiCtx *ctx, char *line) {
     char *ptr = line + 10;
     char model[BUFSIZ];
     ssize_t len = 0;
-    if (*ptr != ' ') {
+    if (!isspace(*ptr)) {
         prompt_warning("Usage: /set model <model_name>\n");
         return;
     }
-    ptr += 2;
+    ptr++;
     while (*ptr != '\0') {
         model[len++] = *ptr++;
     }
