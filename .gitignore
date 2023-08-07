@@ -1,0 +1,6 @@
+.env
+*.o
+*.db
+*.txt
+chat
+./scratch
