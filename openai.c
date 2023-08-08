@@ -420,10 +420,9 @@ json *openAiListModels(openAiCtx *ctx) {
 static size_t openAiChatStreamCallback(char *stream, size_t size, size_t nmemb,
                                        void **userdata) {
     openAiCtx **ctx = (openAiCtx **)userdata;
-    char *ptr = stream;
-    size_t rbytes = size * nmemb, cur_len;
-    int count = 0;
     json *j, *sel, *choices = NULL;
+    char *ptr = stream;
+    size_t rbytes = size * nmemb;
 
     if ((*ctx)->flags & OPEN_AI_FLAG_VERBOSE) {
         printf("%s\n", stream);
@@ -487,7 +486,6 @@ void openAiChatStream(openAiCtx *ctx, char *msg) {
     size_t msg_len = strlen(msg);
     /* msg gets freed by the caller */
     aoStr *ref = aoStrFromString(msg, msg_len);
-    aoStr *user_mesage = aoStrDupRaw(msg, msg_len, msg_len);
     aoStr *user_escaped_msg = NULL, *assistant_escaped_msg = NULL;
     int http_ok = 0;
 
@@ -506,6 +504,10 @@ void openAiChatStream(openAiCtx *ctx, char *msg) {
     http_ok = curlHttpStreamPost("https://api.openai.com/v1/chat/completions",
                                  ctx->auth_headers, payload, (void **)&ctx,
                                  openAiChatStreamCallback, ctx->flags);
+    if (!http_ok) {
+        warning("Failed to make request\n");
+        return;
+    }
     printf("\n\n");
     assistant_escaped_msg = aoStrEscapeString(ctx->tmp_buffer);
 
