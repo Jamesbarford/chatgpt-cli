@@ -17,6 +17,7 @@ OBJS = $(OUT)/main.o \
 	   $(OUT)/http.o \
 	   $(OUT)/aostr.o \
 	   $(OUT)/list.o \
+	   $(OUT)/dict.o \
 	   $(OUT)/io.o \
 	   $(OUT)/sql.o \
 	   $(OUT)/prompt.o \
@@ -59,13 +60,18 @@ $(OUT)/list.o: \
 	./list.c \
 	./list.h
 
+$(OUT)/dict.o: \
+	./dict.c \
+	./dict.h
+
 $(OUT)/io.o: \
 	./io.c \
 	./io.h
 
 $(OUT)/prompt.o: \
 	./prompt.c \
-	./prompt.h
+	./prompt.h \
+	./dict.h
 
 $(OUT)/sql.o: \
 	./sql.c \

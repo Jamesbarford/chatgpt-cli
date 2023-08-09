@@ -1,5 +1,5 @@
-#ifndef __IO_H
-#define __IO_H
+#ifndef IO_H
+#define IO_H
 
 #include "aostr.h"
 

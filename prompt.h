@@ -1,5 +1,5 @@
-#ifndef __PROMPT_H
-#define __PROMPT_H
+#ifndef PROMPT_H
+#define PROMPT_H
 
 #include "openai.h"
 

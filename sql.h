@@ -1,5 +1,5 @@
-#ifndef __SQL_H
-#define __SQL_H
+#ifndef SQL_H
+#define SQL_H
 
 #include <sqlite3.h>
 #include <stdarg.h>

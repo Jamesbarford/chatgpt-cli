@@ -94,16 +94,18 @@ void openAiCtxHistoryPrint(openAiCtx *ctx) {
         openAiMessage *msg = &ctx->chat_history[i];
         switch (msg->role) {
         case OPEN_AI_ROLE_USER:
-            printf("[user]: %s\n", msg->content->data);
+            printf("[%zu] [user]: %s\n", i, msg->content->data);
             break;
         case OPEN_AI_ROLE_ASSISTANT:
-            printf("\033[0;32m[assistant]:\033[0m %s\n", msg->content->data);
+            printf("[%zu] \033[0;32m[assistant]:\033[0m %s\n", i,
+                   msg->content->data);
             break;
         case OPEN_AI_ROLE_SYSTEM:
-            printf("\033[0;36m[system]:\033[0m %s\n", msg->content->data);
+            printf("[%zu] \033[0;36m[system]:\033[0m %s\n", i,
+                   msg->content->data);
             break;
         case OPEN_AI_ROLE_FUNCTION:
-            printf("[function]: %s\n", msg->content->data);
+            printf("[%zu] [function]: %s\n", i, msg->content->data);
             break;
         }
     }
@@ -446,7 +448,7 @@ static size_t openAiChatStreamCallback(char *stream, size_t size, size_t nmemb,
             j = jsonParseWithLen(ptr, rbytes - (stream - ptr));
             if (!j) {
                 warning("Failed to Parse JSON\n");
-            } else if (j && j->state) {
+            } else if (!jsonOk(j)) {
                 warning("Failed to Parse JSON");
                 jsonPrintError(j);
             }

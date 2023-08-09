@@ -125,9 +125,9 @@ int aoStrExtendBuffer(aoStr *buf, unsigned int additional) {
 
 /* Only extend the buffer if the additional space required would overspill the
  * current allocated capacity of the buffer */
-int aoStrExtendBufferIfNeeded(aoStr *buf, size_t additional) {
+static int aoStrExtendBufferIfNeeded(aoStr *buf, size_t additional) {
     if ((buf->len + 1 + additional) >= buf->capacity) {
-        return aoStrExtendBuffer(buf, additional > 256 ? additional : 256);
+        return aoStrExtendBuffer(buf, additional);
     }
     return 0;
 }
@@ -234,7 +234,7 @@ aoStr *aoStrDup(aoStr *buf) {
 }
 
 size_t aoStrWrite(aoStr *buf, char *s, size_t len) {
-    aoStrExtendBufferIfNeeded(buf, len);
+    aoStrExtendBufferIfNeeded(buf, len * 2);
     memcpy(buf->data, s, len);
     buf->len = len;
     buf->data[buf->len] = '\0';
@@ -242,7 +242,7 @@ size_t aoStrWrite(aoStr *buf, char *s, size_t len) {
 }
 
 void aoStrCatLen(aoStr *buf, const void *d, size_t len) {
-    aoStrExtendBufferIfNeeded(buf, len);
+    aoStrExtendBufferIfNeeded(buf, len * 2);
     memcpy(buf->data + buf->len, d, len);
     buf->len += len;
     buf->data[buf->len] = '\0';
@@ -251,6 +251,9 @@ void aoStrCatLen(aoStr *buf, const void *d, size_t len) {
 void aoStrCat(aoStr *buf, const void *d) {
     size_t len = strlen(d);
     aoStrCatLen(buf, d, len);
+}
+
+void aoStrnCatPrintf(aoStr *b, long limit, const char *fmt, ...) {
 }
 
 void aoStrCatPrintf(aoStr *b, const char *fmt, ...) {
@@ -494,8 +497,8 @@ error:
 }
 
 int aoStrIsMimeEncoded(aoStr *buf) {
-    const char *prefix = "=?utf-8?Q?";
-    const char *suffix = "?=";
+    static const char *prefix = "=?utf-8?Q?";
+    static const char *suffix = "?=";
 
     return strncmp(prefix, (char *)buf->data, 10) == 0 &&
             strncmp((char *)buf->data + (buf->len - 2), suffix, 2) == 0;

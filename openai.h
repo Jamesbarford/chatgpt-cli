@@ -4,8 +4,8 @@
  *
  * This code is released under the BSD 2 clause license.
  * See the COPYING file for more information. */
-#ifndef __OPENAPI_H
-#define __OPENAPI_H
+#ifndef OPENAPI_H
+#define OPENAPI_H
 
 #include <stddef.h>
 
