@@ -53,7 +53,8 @@ aoStr *aoStrFromString(char *s, size_t len);
 aoStr *aoStrDupRaw(char *s, size_t len, size_t capacity);
 aoStr *aoStrDup(aoStr *buf);
 aoStr *aoStrMaybeDup(aoStr *buf);
-size_t aoStrWrite(aoStr *buf, char *s, size_t len);
+
+char *aoStrMove(aoStr *buf);
 
 void aoStrCatLen(aoStr *buf, const void *d, size_t len);
 void aoStrCat(aoStr *buf, const void *d);

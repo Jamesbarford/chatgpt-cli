@@ -21,7 +21,7 @@
 #include "linenoise.h"
 #include "openai.h"
 #include "panic.h"
-#include "prompt.h"
+#include "cli.h"
 
 char *getApiKey(void) {
     char *apikey = NULL;
@@ -32,7 +32,7 @@ char *getApiKey(void) {
     }
 
     if ((fd = open(".env", O_RDONLY, 0666)) == -1) {
-        panic("Failed to read .env file and get OPEN_API_KEY\n");
+        panic("Failed to read .env file and OPEN_API_KEY was not set as an environment variable\n");
     }
 
     off_t len = lseek(fd, 0, SEEK_END);
@@ -62,5 +62,5 @@ int main(void) {
 
     openAiCtxSetFlags(ctx, (OPEN_AI_FLAG_HISTORY | OPEN_AI_FLAG_STREAM));
     openAiCtxDbInit(ctx);
-    promptMain(ctx);
+    cliMain(ctx);
 }

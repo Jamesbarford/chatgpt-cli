@@ -33,6 +33,13 @@ char *aoStrGetData(aoStr *buf) {
     return buf->data;
 }
 
+/* Get the underlying string and free the container 'aoStr' */
+char *aoStrMove(aoStr *buf) {
+    char *buffer = buf->data;
+    free(buf);
+    return buffer;
+}
+
 size_t aoStrGetOffset(aoStr *buf) {
     return buf->offset;
 }
@@ -231,14 +238,6 @@ aoStr *aoStrDup(aoStr *buf) {
     aoStrSetLen(dupe, buf->len);
     aoStrSetCapacity(dupe, buf->len);
     return dupe;
-}
-
-size_t aoStrWrite(aoStr *buf, char *s, size_t len) {
-    aoStrExtendBufferIfNeeded(buf, len * 2);
-    memcpy(buf->data, s, len);
-    buf->len = len;
-    buf->data[buf->len] = '\0';
-    return len;
 }
 
 void aoStrCatLen(aoStr *buf, const void *d, size_t len) {

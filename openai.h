@@ -101,7 +101,8 @@ void openAiCtxDbInsertMessage(openAiCtx *ctx, int role, aoStr *msg);
 void openAiCtxLoadChatHistoryById(openAiCtx *ctx, int chat_id);
 void openAiCtxDbSaveHistory(openAiCtx *ctx);
 int *openAiCtxDbGetChatIds(openAiCtx *ctx, int *count);
+list *openAiCtxGetChats(openAiCtx *ctx);
 
 void openAiCtxHistoryDel(openAiCtx *ctx, int msg_id);
 
-#endif // !__OPENAPI_H
+#endif // !OPENAPI_H

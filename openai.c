@@ -5,6 +5,7 @@
  * This code is released under the BSD 2 clause license.
  * See the COPYING file for more information. */
 #include <errno.h>
+#include <pwd.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -122,6 +123,8 @@ void openAiCtxHistoryPrint(openAiCtx *ctx) {
 
 void openAiCtxHistoryClear(openAiCtx *ctx) {
     openAiMessageListRelease(ctx->chat);
+    ctx->chat = listNew();
+    ctx->chat_len = 0;
 }
 
 void openAiChatHistoryAppend(openAiCtx *ctx, int role, char *name,
@@ -232,7 +235,16 @@ static void openAiAppendOptionsToPayload(openAiCtx *ctx, aoStr *payload,
 
 void openAiCtxDbInit(openAiCtx *ctx) {
     if (ctx->db == NULL) {
-        ctx->db = sqlCtxNew(SQL_DB_NAME);
+        struct passwd *pw = getpwuid(getuid());
+
+        if (pw == NULL) {
+            panic("Could not get pwd for user\n");
+        }
+        aoStr *db_name = aoStrAlloc(512);
+        aoStrCatPrintf(db_name, "/%s/.%s", pw->pw_dir, SQL_DB_NAME);
+
+        ctx->db = sqlCtxNew(aoStrMove(db_name));
+
         char *sql =
                 "CREATE TABLE IF NOT EXISTS chat(id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 "name TEXT,"
@@ -364,6 +376,27 @@ void openAiCtxLoadChatHistoryById(openAiCtx *ctx, int chat_id) {
     ctx->chat_len = count;
 }
 
+list *openAiCtxGetChats(openAiCtx *ctx) {
+    list *chats = listNew();
+    sqlRow row;
+
+    sqlSelect(ctx->db, &row, "SELECT id, name from chat ORDER BY id;", NULL, 0);
+
+    while (sqlIter(&row)) {
+        int id = row.col[0].integer;
+        char *name = "(null)";
+        if (row.col[1].type == SQL_TEXT) {
+            name = row.col[1].str;
+        }
+
+        aoStr *buf = aoStrAlloc(128);
+        aoStrCatPrintf(buf, "[%d] %s", id, name);
+        listAppend(chats, buf);
+    }
+
+    return chats;
+}
+
 int *openAiCtxDbGetChatIds(openAiCtx *ctx, int *count) {
     int *arr = NULL;
     sqlRow row;
@@ -460,6 +493,7 @@ static size_t openAiChatStreamCallback(char *stream, size_t size, size_t nmemb,
                 warning("Failed to Parse JSON\n");
             } else if (!jsonOk(j)) {
                 warning("Failed to Parse JSON");
+                jsonPrint(j);
                 jsonPrintError(j);
             }
 
@@ -484,6 +518,7 @@ static size_t openAiChatStreamCallback(char *stream, size_t size, size_t nmemb,
                 }
 
                 jsonPrint(j);
+                jsonRelease(j);
             }
         }
         ptr++;

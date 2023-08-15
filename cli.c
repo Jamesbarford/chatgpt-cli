@@ -29,6 +29,7 @@ static void commandChatFile(openAiCtx *ctx, char *line);
 static void commandChatList(openAiCtx *ctx, char *line);
 static void commandChatRename(openAiCtx *ctx, char *line);
 static void commandChatLoad(openAiCtx *ctx, char *line);
+static void commandChatDel(openAiCtx *ctx, char *line);
 static void commandChatHistoryList(openAiCtx *ctx, char *line);
 static void commandChatHistoryClear(openAiCtx *ctx, char *line);
 static void commandChatHistoryDel(openAiCtx *ctx, char *line);
@@ -51,13 +52,14 @@ static openAiCommand readonly_command[] = {
         {"system", commandSystem},
         {"file", commandChatFile},
 
-        {"hist-clear", commandChatHistoryClear},
         {"hist-list", commandChatHistoryList},
         {"hist-del", commandChatHistoryDel},
+        {"hist-clear", commandChatHistoryClear},
 
         {"chat-load", commandChatLoad},
         {"chat-list", commandChatList},
         {"chat-rename", commandChatRename},
+        {"chat-del", commandChatDel},
 
         {"set-model", commandSetModel},
         {"set-verbose", commandSetVerbose},
@@ -69,61 +71,48 @@ static openAiCommand readonly_command[] = {
         {"help", commandHelp},
 };
 
-static char *promptHints(const char *buf, int *color, int *bold) {
-    *color = 35;
-    *bold = 0;
-    if (!strcasecmp(buf, "/chat")) {
-        return "-<cmd>";
-    } else if (!strcasecmp(buf, "/hist")) {
-        return "-<cmd>";
-    } else if (!strcasecmp(buf, "/set")) {
-        return "-<cmd>";
-    } else if (!strcasecmp(buf, "/sys")) {
-        return "tem";
-    } else if (!strcasecmp(buf, "/ex")) {
-        return "it";
-    }
-    return NULL;
-}
+#define MAX_COMPLETIONS 10
 
-static void promptCompletion(const char *buf, linenoiseCompletions *lc) {
-    if (buf[0] == '/') {
-        if (!strncmp(buf, "/set", 4)) {
-            linenoiseAddCompletion(lc, "/set temp");
-            linenoiseAddCompletion(lc, "/set model");
-            linenoiseAddCompletion(lc, "/set top_p");
-            linenoiseAddCompletion(lc, "/set presence-pen");
-            return;
-        } else if (!strncmp(buf, "/mod", 3)) {
-            linenoiseAddCompletion(lc, "/models");
-            return;
-        } else if (!strncmp(buf, "/chat", 5)) {
-            linenoiseAddCompletion(lc, "/chat history");
-            linenoiseAddCompletion(lc, "/chat persist");
-            linenoiseAddCompletion(lc, "/chat list");
-            linenoiseAddCompletion(lc, "/chat load");
-            linenoiseAddCompletion(lc, "/chat history delete");
-            return;
-        }
+typedef struct {
+    char *command;
+    char *hint;
+    char *prompt;
+    char *completions[MAX_COMPLETIONS];
+    int num_completions; // to keep track of actual number of completions
+} cliCommandInfo;
 
-        if (!strncmp(buf, "/sys", 4)) {
-            linenoiseAddCompletion(lc, "/system");
-            return;
-        }
+// Define the array of structs
+cliCommandInfo cli_info[] = {
+    {"/save", "/sa", " /save", {"/save"}, 1},
+    {"/autosave", "/autos", " /autosave", {"/autosave"}, 1},
+    {"/models", "/mod", " /models", {"/models"}, 1},
+    {"/info", "/in", " /info", {"/info"}, 1},
+    {"/system", "/sys", " /system <prompt>", {"/system"}, 1},
+    {"/file", "/fi", " /file <file_path> <prompt>", {"/file"}, 1},
 
-        if (!strncmp(buf, "/set te", 7)) {
-            linenoiseAddCompletion(lc, "/set temp");
-        } else if (!strncmp(buf, "/set m", 6)) {
-            linenoiseAddCompletion(lc, "/set-model");
-        } else if (!strncmp(buf, "/set top", 8)) {
-            linenoiseAddCompletion(lc, "/set-top_p");
-        } else if (!strncmp(buf, "/set pre", 8)) {
-            linenoiseAddCompletion(lc, "/set-presence-pen");
-        } else if (!strncmp(buf, "/list-m", 7)) {
-            linenoiseAddCompletion(lc, "/list-models");
-        }
-    }
-}
+    {"/hist-list", "/hist-li", " /hist-list", {"/hist-list"}, 1},
+    {"/hist-clear", "/hist-cl", " /hist-clear", {"/hist-clear"}, 1},
+    {"/hist-del", "/hist-de", " /hist-del <id>", {"/hist-del"}, 1},
+    {"/hist", "/hist", " /hist-<list | del | clear>", {"/hist-list", "/hist-del", "/hist-clear"}, 3},
+
+    {"/chat-list", "/chat-li", " /chat-list", {"/chat-list"}, 1},
+    {"/chat-load", "/chat-lo", " /chat-load <id>", {"/chat-load"}, 1},
+    {"/chat-del", "/chat-de", " /chat-del <id>", {"/chat-del"}, 1},
+    {"/chat-rename", "/chat-re", " /chat-rename <id> <name>", {"/chat-rename"}, 1},
+    {"/chat", "/chat", " /chat-<load | list | rename | del>", {"/chat-load", "/chat-list", "/chat-rename", "/chat-del"}, 4},
+
+    {"/set-model", "/set-m", " /set-model <model_id>", {"/set-model"}, 1},
+    {"/set-verbose", "/set-v", " /set-verbose <1|0>", {"/set-verbose"}, 1},
+    {"/set-top_p", "/set-to", " /set-top_p <float>", {"/set-top_p"}, 1},
+    {"/set-presence-pen", "/set-pr", " /set-presence-pen <float>", {"/set-presence-pen"}, 1},
+    {"/set-temperature", "/set-te", " /set-temperature <float>", {"/set-temperature"}, 1},
+    {"/set", "/set", " /set-<model | verbose | top_p | presence-pen | temperature>", {"/set-model", "/set-verbose", "/set-top_p", "/set-presence-pen", "/set-temperature"}, 5},
+
+    {"/exit", "/ex", " /exit", {"/exit"}, 1},
+    {"/help", "/he", " /help", {"/help"}, 1},
+};
+
+
 
 static void commandChat(openAiCtx *ctx, char *line) {
     ssize_t len = 0;
@@ -264,35 +253,64 @@ static void commandChatHistoryClear(openAiCtx *ctx, char *line) {
 
 static void commandChatList(openAiCtx *ctx, char *line) {
     (void)line;
-    int count = 0;
-    int *ids = openAiCtxDbGetChatIds(ctx, &count);
-    for (int i = 0; i < count; ++i) {
-        printf("%d\n", ids[i]);
+    list *chats = openAiCtxGetChats(ctx);
+    list *node = chats->next;
+    list *next = NULL;
+    aoStr *buf = NULL;
+
+    while (node != chats) {
+        buf = node->value;        
+        next = node->next;
+        printf("%s\n", buf->data);
+        aoStrRelease(buf);
+        free(node);
+        node = next;
     }
-    free(ids);
+    if (chats) {
+        free(chats);
+    }
+}
+
+static void commandChatDel(openAiCtx *ctx, char *line) {
+    int id = 0;
+    char *ptr = line;
+
+    if (!isspace(*ptr)) {
+        warning("Usage: /chat-del <id>\n");
+        return;
+    }
+
+    ptr++;
+    while (isdigit(*ptr)) {
+        id = id * 10 + *ptr - '0';
+    }
+    openAiCtxDbDeleteChatById(ctx,id);
 }
 
 static void commandChatRename(openAiCtx *ctx, char *line) {
     char newname[BUFSIZ];
     ssize_t newlen = 0;
     char *ptr = line;
+    int id = 0;
 
-    if (!(ctx->flags & OPEN_AI_FLAG_PERSIST)) {
-        warning("Please turn on OPEN_AI_FLAG_PERSIST to create a table entry and rename the chat\n");
-        return;
-    }
-    
     if (!isspace(*ptr)) {
-        warning("Usage: /chat-rename <name_of_chat>\n");
+        warning("Usage: /chat-rename <id> <name_of_chat>\n");
         return;
     }
 
-    ptr++;    
+    ptr++;
+    while (isdigit(*ptr)) {
+        id = id * 10 + *ptr - '0';
+    }
+    if (!isspace(*ptr)) {
+        warning("Usage: /chat-rename <id> <name_of_chat>\n");
+        return;
+    }
     while (*ptr != '\0') {
         newname[newlen++] = *ptr++;
     }
     newname[newlen] = '\0';
-    openAiCtxDbRenameChat(ctx, ctx->chat_id, newname);
+    openAiCtxDbRenameChat(ctx, id, newname);
 }
 
 /* Can load a chat from the database without saving subsequent messages to that
@@ -376,8 +394,7 @@ static void commandExit(openAiCtx *ctx, char *line) {
 }
 
 static void commandHelp(openAiCtx *ctx, char *line) {
-    printf("Helping");
-    fprintf(stderr, "COMMANDS: \n\n");
+    fprintf(stderr, "\nCOMMANDS: \n\n");
     fprintf(stderr, "  save - Saves current chat to SQLite3 database\n");
     fprintf(stderr,
             "  autosave - Saves current chat to SQLite3 database and will save all future messages both to and from GPT\n");
@@ -394,9 +411,15 @@ static void commandHelp(openAiCtx *ctx, char *line) {
     fprintf(stderr,
             "  hist-clear - Clear all history from memory, but not SQLite3\n");
     fprintf(stderr,
-            "  chat-load <id> - Load a previously saved chat from SQLite3\n");
+            "  chat-list - List chats saved in database\n");
+    fprintf(stderr,
+            "  chat-load <id> - Load a previously saved chat from database\n");
+    fprintf(stderr,
+            "  chat-del <id> - Delete a chat from database\n");
+    fprintf(stderr,
+            "  chat-rename <id> <name> - Rename a chat with id <id> to <name> in database\n");
 
-    fprintf(stderr, "SET OPTIONS: \n\n");
+    fprintf(stderr, "\nSET OPTIONS: \n\n");
     fprintf(stderr,
             "  set-verbose <1|0> - Prints HTTP information, streams and debug info\n");
     fprintf(stderr, "  set-model <name> - Swith the currently used model\n");
@@ -492,14 +515,49 @@ static void commandSetTemperature(openAiCtx *ctx, char *line) {
     }
 }
 
-static void promptInit(void) {
+static char *cliHintsCallback(const char *buf, int *color, int *bold) {
+    *color = 90;
+    *bold = 0;
+
+    int len = sizeof(cli_info) / sizeof(cli_info[0]);
+    int slen = 0;
+    for (int i = 0; i < len; ++i) {
+        cliCommandInfo *info = &cli_info[i];
+        slen = strlen(info->hint);
+        if (!strncmp(info->hint, buf, slen)) {
+            return info->prompt;
+        }
+    }
+    return NULL;
+}
+
+static void cliCompletionCallback(const char *buf, linenoiseCompletions *lc) {
+    if (buf[0] == '/') {
+        int len = sizeof(cli_info) / sizeof(cli_info[0]);
+        int slen = 0;
+
+        for (int i = 0; i < len; ++i) {
+            cliCommandInfo *info = &cli_info[i];
+            slen = strlen(info->hint);
+            if (!strncmp(info->hint, buf, slen)) {
+                for (int j = 0; j < info->num_completions; ++j) {
+                    char *completion = info->completions[j];
+                    linenoiseAddCompletion(lc, completion);
+                }
+                return;
+            }
+        }
+    }
+}
+
+static void cliInit(void) {
     linenoiseHistoryLoad("history.txt"); /* Load the history at startup */
-    linenoiseSetCompletionCallback(promptCompletion);
-    linenoiseSetHintsCallback(promptHints);
+    linenoiseSetCompletionCallback(cliCompletionCallback);
+    linenoiseSetHintsCallback(cliHintsCallback);
     linenoiseSetMultiLine(1);
 }
 
-static dict *promptLoadCommands(void) {
+static dict *cliLoadCommands(void) {
     dict *commands = dictNew(&default_table_type);
     dictSetFreeKey(commands, NULL);
     openAiCommand *command;
@@ -511,10 +569,10 @@ static dict *promptLoadCommands(void) {
     return commands;
 }
 
-void promptMain(openAiCtx *ctx) {
+void cliMain(openAiCtx *ctx) {
     char *line, *ptr;
-    promptInit();
-    dict *commands = promptLoadCommands();
+    cliInit();
+    dict *commands = cliLoadCommands();
     openAiCommand *command;
     char cmd[128];
     int cmd_len = 0;

@@ -1,12 +1,18 @@
-TARGET := chat
+TARGET := chatgpt
 CC     := cc
 CFLAGS := -Wall -O2
 OUT    := .
+
+PREFIX?=/usr/local
 
 $(OUT)/%.o: %.c
 	$(CC) -c $(CFLAGS) -o $@ $<
 
 all: $(TARGET)
+
+install:
+	mkdir -p $(PREFIX)/bin
+	install -c -m 555 $(TARGET) $(PREFIX)/bin
 
 clean:
 	rm -rf $(OUT)/*.o
@@ -20,7 +26,7 @@ OBJS = $(OUT)/main.o \
 	   $(OUT)/dict.o \
 	   $(OUT)/io.o \
 	   $(OUT)/sql.o \
-	   $(OUT)/prompt.o \
+	   $(OUT)/cli.o \
 	   $(OUT)/openai.o \
 	   $(OUT)/linenoise.o \
 	   $(OUT)/json-selector.o
@@ -68,9 +74,9 @@ $(OUT)/io.o: \
 	./io.c \
 	./io.h
 
-$(OUT)/prompt.o: \
-	./prompt.c \
-	./prompt.h \
+$(OUT)/cli.o: \
+	./cli.c \
+	./cli.h \
 	./dict.h
 
 $(OUT)/sql.o: \

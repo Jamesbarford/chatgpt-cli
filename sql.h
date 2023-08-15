@@ -8,7 +8,7 @@
 #include "aostr.h"
 
 #define SQL_MAX_QUERY_PARAMS (64)
-#define SQL_DB_NAME          "chat-hist.db"
+#define SQL_DB_NAME          "chatgpt-hist.db"
 
 typedef enum SqlType {
     SQL_INT = SQLITE_INTEGER,
@@ -58,7 +58,6 @@ typedef struct sqlCtx {
     sqlite3 *conn;
     char *dbname;
 } sqlCtx;
-
 
 sqlCtx *sqlCtxNew(char *dbname);
 /* Unsafe */

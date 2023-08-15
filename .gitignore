@@ -2,5 +2,7 @@
 *.o
 *.db
 *.txt
+a.out
 chat
+chatgpt
 scratch
