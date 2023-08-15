@@ -4,8 +4,8 @@
  *
  * This code is released under the BSD 2 clause license.
  * See the COPYING file for more information. */
-#ifndef __LIST_H
-#define __LIST_H
+#ifndef LIST_H
+#define LIST_H
 
 typedef struct list {
     struct list *prev;

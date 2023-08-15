@@ -160,6 +160,7 @@ static void commandModels(openAiCtx *ctx, char *line) {
     json *resp = openAiListModels(ctx);
     if (resp) {
         json *data = jsonSelect(resp, ".data[*]:a");
+
         if (data) {
             for (json *tmp = data; tmp != NULL; tmp = tmp->next) {
                 json *id = jsonSelect(tmp, ".id:s");
@@ -173,8 +174,8 @@ static void commandModels(openAiCtx *ctx, char *line) {
 }
 
 static void commandSystem(openAiCtx *ctx, char *line) {
-    char *ptr = line + 7; /* skip /system*/
-    if (*(ptr + 1) == '\0') {
+    char *ptr = line; /* skip /system*/
+    if (*ptr == '\0') {
         prompt_warning("Usage: /system <cmd>");
         return;
     }
@@ -257,9 +258,9 @@ static void commandChatRename(openAiCtx *ctx, char *line) {
         warning("Please turn on OPEN_AI_FLAG_PERSIST to create a table entry and rename the chat\n");
         return;
     }
-    ptr = line + 12;
+    ptr = line;
     if (!isspace(*ptr)) {
-        warning("Usage: /chat rename <name_of_chat>\n");
+        warning("Usage: /chat-rename <name_of_chat>\n");
         return;
     }
     ptr++;
@@ -274,11 +275,11 @@ static void commandChatRename(openAiCtx *ctx, char *line) {
 /* Can load a chat from the database without saving subsequent messages to that
  * chat */
 static void commandChatLoad(openAiCtx *ctx, char *line) {
-    char *ptr = line + 10;
+    char *ptr = line;
     int chat_id = -1;
 
     if (!isspace(*ptr)) {
-        prompt_warning("Usage: /chat load <chat_id>\n");
+        warning("Usage: /chat-load <chat_id>\n");
         return;
     }
 
@@ -288,7 +289,7 @@ static void commandChatLoad(openAiCtx *ctx, char *line) {
         ptr++;
     }
     if (*ptr == '\0') {
-        warning("Usage: /chat load <chat_id>\n");
+        warning("Usage: /chat-load <chat_id>\n");
     } else {
         chat_id = atoi(ptr);
         if (chat_id) {
@@ -299,36 +300,36 @@ static void commandChatLoad(openAiCtx *ctx, char *line) {
 
 static void commandChatHistoryList(openAiCtx *ctx, char *line) {
     (void)line;
-    printf("messages: %zu\n", ctx->chat_len);
+    printf("messages: %d\n", ctx->chat_len);
     openAiCtxHistoryPrint(ctx);
 }
 
 static void commandChatHistoryDel(openAiCtx *ctx, char *line) {
-    char *ptr = line + 10;
-    int chat_id = -1;
+    char *ptr = line;
+    char *ok;
+    int msg_idx = -1;
 
     if (!isspace(*ptr)) {
         prompt_warning("Usage: /hist-del <msg_idx>\n");
         return;
     }
 
-    ptr++;
-
     while (!isdigit(*ptr) && *ptr != '\0') {
         ptr++;
     }
     if (*ptr == '\0') {
-        warning("Usage: /chat load <chat_id>\n");
+        prompt_warning("Usage: /hist-del <msg_idx>\n");
     } else {
-        chat_id = atoi(ptr);
-        if (chat_id) {
-            openAiCtxLoadChatHistoryById(ctx, chat_id);
+        msg_idx = (int)strtol(ptr, &ok, 10);
+        if (msg_idx != -1) {
+            printf("%d\n", msg_idx);
+            openAiCtxHistoryDel(ctx,msg_idx);
         }
     }
 }
 
 static void commandSetModel(openAiCtx *ctx, char *line) {
-    char *ptr = line + 10;
+    char *ptr = line;
     char model[BUFSIZ];
     ssize_t len = 0;
     if (!isspace(*ptr)) {
@@ -394,7 +395,7 @@ static void commandInfo(openAiCtx *ctx, char *line) {
 }
 
 static void commandSetVerbose(openAiCtx *ctx, char *line) {
-    char *ptr = line + 12;
+    char *ptr = line;
 
     if (!isspace(*ptr)) {
         warning("Usage: set-verbose <1|0>\n");
@@ -411,7 +412,7 @@ static void commandSetVerbose(openAiCtx *ctx, char *line) {
 }
 
 static void commandSetTopP(openAiCtx *ctx, char *line) {
-    char *ptr = line + 9, *check;
+    char *ptr = line, *check;
     float top_p = 0;
     if (!isspace(*ptr)) {
         warning("Usage: set-top_p <float>\n");
@@ -427,7 +428,7 @@ static void commandSetTopP(openAiCtx *ctx, char *line) {
 }
 
 static void commandSetPresencePenalty(openAiCtx *ctx, char *line) {
-    char *ptr = line + 16, *check;
+    char *ptr = line, *check;
     double presence_penalty = 0;
     if (!isspace(*ptr)) {
         warning("Usage: set-presence-pen <float>\n");
@@ -448,7 +449,7 @@ static void commandSetPresencePenalty(openAiCtx *ctx, char *line) {
 }
 
 static void commandSetTemperature(openAiCtx *ctx, char *line) {
-    char *ptr = line + 15, *check;
+    char *ptr = line, *check;
     float temperature = 0;
     if (!isspace(*ptr)) {
         warning("Usage: set-temperature <float>\n");

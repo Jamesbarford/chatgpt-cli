@@ -40,13 +40,19 @@ list *openAiAuthHeaders(openAiCtx *ctx) {
     return headers;
 }
 
-static openAiMessage *openAiMessagesNew(int count) {
-    openAiMessage *msgs = (openAiMessage *)calloc(count, sizeof(openAiMessage));
-    if (msgs == NULL) {
-        return NULL;
+static void openAiMessageRelease(void *_msg) {
+    if (_msg) {
+        openAiMessage *msg = (openAiMessage *)_msg;
+        aoStrRelease(msg->content);
+        free(msg);
     }
-    return msgs;
 }
+
+static void openAiMessageListRelease(list *msgs) {
+    listRelease(msgs, openAiMessageRelease);
+}
+
+
 
 openAiCtx *openAiCtxNew(char *apikey, char *model, char *organisation) {
     openAiCtx *ctx = (openAiCtx *)malloc(sizeof(openAiCtx));
@@ -61,9 +67,8 @@ openAiCtx *openAiCtxNew(char *apikey, char *model, char *organisation) {
     ctx->auth_headers = openAiAuthHeaders(ctx);
 
     /* History */
-    ctx->chat_capacity = 10;
     ctx->chat_len = 0;
-    ctx->chat_history = openAiMessagesNew(ctx->chat_capacity);
+    ctx->chat = listNew();
 
     ctx->db = NULL;
 
@@ -90,59 +95,45 @@ void openAiCtxPrint(openAiCtx *ctx) {
 }
 
 void openAiCtxHistoryPrint(openAiCtx *ctx) {
-    for (size_t i = 0; i < ctx->chat_len; ++i) {
-        openAiMessage *msg = &ctx->chat_history[i];
+    list *node = ctx->chat->next;
+    openAiMessage *msg;
+    int i = 0;
+
+    while (node != ctx->chat) {
+        msg = (openAiMessage *)node->value;
         switch (msg->role) {
         case OPEN_AI_ROLE_USER:
-            printf("[%zu] [user]: %s\n", i, msg->content->data);
+            printf("[%d] [user]: %s\n", i, msg->content->data);
             break;
         case OPEN_AI_ROLE_ASSISTANT:
-            printf("[%zu] \033[0;32m[assistant]:\033[0m %s\n", i,
+            printf("[%d] \033[0;32m[assistant]:\033[0m %s\n", i,
                    msg->content->data);
             break;
         case OPEN_AI_ROLE_SYSTEM:
-            printf("[%zu] \033[0;36m[system]:\033[0m %s\n", i,
+            printf("[%d] \033[0;36m[system]:\033[0m %s\n", i,
                    msg->content->data);
             break;
         case OPEN_AI_ROLE_FUNCTION:
-            printf("[%zu] [function]: %s\n", i, msg->content->data);
+            printf("[%d] [function]: %s\n", i, msg->content->data);
             break;
         }
+        node = node->next;
+        i++;
     }
 }
 
 void openAiCtxHistoryClear(openAiCtx *ctx) {
-    if (ctx->chat_len == 0) {
-        return;
-    }
-    for (size_t i = 0; i < ctx->chat_len; ++i) {
-        openAiMessage *msg = &ctx->chat_history[i];
-        aoStrRelease(msg->content);
-    }
-    free(ctx->chat_history);
-    ctx->chat_len = 0;
-    ctx->chat_capacity = 10;
-    ctx->chat_history = (openAiMessage *)malloc(sizeof(openAiMessage) *
-                                                ctx->chat_capacity);
+    openAiMessageListRelease(ctx->chat);
 }
 
 void openAiChatHistoryAppend(openAiCtx *ctx, int role, char *name,
                              aoStr *data) {
-    openAiMessage *msgs = ctx->chat_history;
-    if (ctx->chat_len + 1 >= ctx->chat_capacity) {
-        msgs = realloc(msgs, sizeof(openAiMessage) * ctx->chat_capacity * 2);
-        if (msgs != NULL) {
-            ctx->chat_capacity *= 2;
-            ctx->chat_history = msgs;
-        } else {
-            warning("Possible OOM: Cannot add more history to chat: %s\n",
-                    strerror(errno));
-        }
-    }
-    openAiMessage *msg = &msgs[ctx->chat_len++];
+    openAiMessage *msg = malloc(sizeof(openAiMessage));
     msg->name = name;
     msg->role = role;
     msg->content = data;
+    listAppend(ctx->chat, msg);
+    ctx->chat_len++;
 }
 
 void openAiCtxRelease(openAiCtx *ctx) {
@@ -154,8 +145,8 @@ void openAiCtxRelease(openAiCtx *ctx) {
         free(ctx->organisation);
     }
     free(ctx->model);
-    free(ctx->chat_history);
     listRelease(ctx->auth_headers, (void (*)(void *))aoStrRelease);
+    openAiMessageListRelease(ctx->chat);
     free(ctx);
 }
 
@@ -193,8 +184,8 @@ void openAiCtxSetTopP(openAiCtx *ctx, float top_p) {
     ctx->top_p = top_p;
 }
 
-void openAiCtxSetChatHistory(openAiCtx *ctx, openAiMessage *chat_history) {
-    ctx->chat_history = chat_history;
+void openAiCtxSetChatHistory(openAiCtx *ctx, list *chat) {
+    ctx->chat = chat;
 }
 
 void openAiCtxSetChatLen(openAiCtx *ctx, size_t history_len) {
@@ -227,10 +218,14 @@ static void openAiAppendOptionsToPayload(openAiCtx *ctx, aoStr *payload,
     if (ctx->flags & OPEN_AI_FLAG_HISTORY) {
         /* This can be optimised, by maintaining a string */
         aoStrCatLen(payload, ",\"messages\": [", 14);
-        for (size_t i = 0; i < ctx->chat_len; ++i) {
-            openAiMessage *msg = &ctx->chat_history[i];
+        openAiMessage *msg;
+        list *node = ctx->chat->next;
+
+        while (node != ctx->chat) {
+            msg = node->value;
             aoStrCatPrintf(payload, "{\"role\": \"%s\", \"content\": \"%s\"},",
                            role_to_str[msg->role], aoStrGetData(msg->content));
+            node = node->next;
         }
     }
     aoStrCatPrintf(payload, "{\"role\": \"%s\", \"content\": \"%s\"}]",
@@ -260,9 +255,15 @@ void openAiCtxDbInit(openAiCtx *ctx) {
 
 void openAiCtxDbSaveHistory(openAiCtx *ctx) {
     /* I do know how to concatinate a string */
-    for (size_t i = 0; i < ctx->chat_len; ++i) {
-        openAiMessage *msg = &ctx->chat_history[i];
-        openAiCtxDbInsertMessage(ctx, msg->role, msg->content);
+    if (ctx->chat_len > 0) {
+        list *node = ctx->chat->next;
+        openAiMessage *msg;
+
+        while (node != ctx->chat) {
+            msg = (openAiMessage *)node->value;
+            openAiCtxDbInsertMessage(ctx, msg->role, msg->content);
+            node = node->next;
+        }
     }
 }
 
@@ -323,11 +324,11 @@ void openAiCtxDbInsertMessage(openAiCtx *ctx, int role, aoStr *msg) {
              params, 3);
 }
 
-openAiMessage *openAiDbGetMessagesByChatId(openAiCtx *ctx, int chat_id,
-                                           int *count) {
+list *openAiDbGetMessagesByChatId(openAiCtx *ctx, int chat_id, int *count) {
     sqlRow row;
+    list *chat = listNew();
     int i = 0, cap = 10;
-    openAiMessage *msgs = NULL, *msg;
+    openAiMessage *msg;
     sqlParam params[1] = {
             {.type = SQL_INT, .integer = chat_id},
     };
@@ -339,36 +340,30 @@ openAiMessage *openAiDbGetMessagesByChatId(openAiCtx *ctx, int chat_id,
         return NULL;
     }
 
-    msgs = (openAiMessage *)malloc(sizeof(openAiMessage) * cap);
-
     while (sqlIter(&row)) {
-        if (i + 1 >= cap) {
-            msgs = realloc(msgs, sizeof(openAiMessage) * cap * 2);
-            cap *= 2;
-        }
-        msg = &msgs[i++];
+        msg = (openAiMessage *)malloc(sizeof(openAiMessage));
         msg->role = row.col[0].integer;
         msg->content = aoStrDupRaw(row.col[1].str, row.col[1].len,
                                    row.col[1].len);
+        listAppend(chat, msg);
     }
     *count = i;
 
-    return msgs;
+    return chat;
 }
 
 void openAiCtxLoadChatHistoryById(openAiCtx *ctx, int chat_id) {
     int count = 0;
-    openAiMessage *msgs = openAiDbGetMessagesByChatId(ctx, chat_id, &count);
+    list *msgs = openAiDbGetMessagesByChatId(ctx, chat_id, &count);
     if (!msgs) {
         return;
     }
-    if (ctx->chat_history != NULL) {
-        free(ctx->chat_history);
+    if (ctx->chat_len > 0) {
+        openAiMessageListRelease(ctx->chat);
     }
+    ctx->chat = msgs;
     ctx->chat_id = chat_id;
     ctx->chat_len = count;
-    ctx->chat_capacity = count;
-    ctx->chat_history = msgs;
 }
 
 int *openAiCtxDbGetChatIds(openAiCtx *ctx, int *count) {
@@ -386,6 +381,24 @@ int *openAiCtxDbGetChatIds(openAiCtx *ctx, int *count) {
     }
     *count = i;
     return arr;
+}
+
+void openAiCtxHistoryDel(openAiCtx *ctx, int msg_id) {
+    int i = 0;
+    list *node = ctx->chat->next;
+    list *prev, *next;
+    while (node != ctx->chat) {
+        if (i == msg_id && node->value) {
+            node->prev->next = node->next;
+            node->next->prev = node->prev;
+            openAiMessageRelease(node->value);
+            free(node);
+            ctx->chat_len--;
+            return;
+        }
+        i++;
+        node = node->next;
+    }
 }
 
 /*
