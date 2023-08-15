@@ -60,7 +60,6 @@ static dictNode *dictNodeNew(void *key, void *value) {
 
 void dictRelease(dict *d) {
     if (d) {
-        size_t i = 0;
         dictNode *next = NULL;
         for (size_t i = 0; i < d->size; ++i) {
             dictNode *n = d->body[i];

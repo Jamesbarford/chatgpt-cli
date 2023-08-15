@@ -253,9 +253,6 @@ void aoStrCat(aoStr *buf, const void *d) {
     aoStrCatLen(buf, d, len);
 }
 
-void aoStrnCatPrintf(aoStr *b, long limit, const char *fmt, ...) {
-}
-
 void aoStrCatPrintf(aoStr *b, const char *fmt, ...) {
     va_list ap, copy;
     va_start(ap, fmt);

@@ -52,8 +52,6 @@ static void openAiMessageListRelease(list *msgs) {
     listRelease(msgs, openAiMessageRelease);
 }
 
-
-
 openAiCtx *openAiCtxNew(char *apikey, char *model, char *organisation) {
     openAiCtx *ctx = (openAiCtx *)malloc(sizeof(openAiCtx));
     if (ctx == NULL) {
@@ -327,7 +325,7 @@ void openAiCtxDbInsertMessage(openAiCtx *ctx, int role, aoStr *msg) {
 list *openAiDbGetMessagesByChatId(openAiCtx *ctx, int chat_id, int *count) {
     sqlRow row;
     list *chat = listNew();
-    int i = 0, cap = 10;
+    int i = 0;
     openAiMessage *msg;
     sqlParam params[1] = {
             {.type = SQL_INT, .integer = chat_id},
@@ -386,7 +384,6 @@ int *openAiCtxDbGetChatIds(openAiCtx *ctx, int *count) {
 void openAiCtxHistoryDel(openAiCtx *ctx, int msg_id) {
     int i = 0;
     list *node = ctx->chat->next;
-    list *prev, *next;
     while (node != ctx->chat) {
         if (i == msg_id && node->value) {
             node->prev->next = node->next;

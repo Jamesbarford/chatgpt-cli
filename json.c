@@ -1369,6 +1369,7 @@ static void printJsonKey(json *J) {
 /* print to stdout */
 static void __json_print(json *J, int depth) {
     if (J == NULL) {
+        printf("(null)\n");
         return;
     }
 

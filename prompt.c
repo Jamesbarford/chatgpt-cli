@@ -26,7 +26,6 @@ static void commandAutoSave(openAiCtx *ctx, char *line);
 static void commandModels(openAiCtx *ctx, char *line);
 static void commandSystem(openAiCtx *ctx, char *line);
 static void commandChatFile(openAiCtx *ctx, char *line);
-static void commandPersist(openAiCtx *ctx, char *line);
 static void commandChatList(openAiCtx *ctx, char *line);
 static void commandChatRename(openAiCtx *ctx, char *line);
 static void commandChatLoad(openAiCtx *ctx, char *line);
@@ -51,11 +50,15 @@ static openAiCommand readonly_command[] = {
 
         {"system", commandSystem},
         {"file", commandChatFile},
+
         {"hist-clear", commandChatHistoryClear},
         {"hist-list", commandChatHistoryList},
         {"hist-del", commandChatHistoryDel},
+
         {"chat-load", commandChatLoad},
         {"chat-list", commandChatList},
+        {"chat-rename", commandChatRename},
+
         {"set-model", commandSetModel},
         {"set-verbose", commandSetVerbose},
         {"set-top_p", commandSetTopP},
@@ -67,18 +70,18 @@ static openAiCommand readonly_command[] = {
 };
 
 static char *promptHints(const char *buf, int *color, int *bold) {
+    *color = 35;
+    *bold = 0;
     if (!strcasecmp(buf, "/chat")) {
-        *color = 35;
-        *bold = 0;
-        return "<cmd>";
-    } else if (!strcasecmp(buf, "/chat h")) {
-        *color = 35;
-        *bold = 0;
-        return "/chat history";
-    } else if (!strcasecmp(buf, "/chat c")) {
-        *color = 35;
-        *bold = 0;
-        return "/chat history delete";
+        return "-<cmd>";
+    } else if (!strcasecmp(buf, "/hist")) {
+        return "-<cmd>";
+    } else if (!strcasecmp(buf, "/set")) {
+        return "-<cmd>";
+    } else if (!strcasecmp(buf, "/sys")) {
+        return "tem";
+    } else if (!strcasecmp(buf, "/ex")) {
+        return "it";
     }
     return NULL;
 }
@@ -144,6 +147,7 @@ static void commandChat(openAiCtx *ctx, char *line) {
 static void commandSave(openAiCtx *ctx, char *line) {
     (void)line;
     if (ctx->chat_id == 0) {
+        openAiCtxDbInit(ctx);
         openAiCtxDbNewChat(ctx);
         openAiCtxDbSaveHistory(ctx);
     }
@@ -155,19 +159,45 @@ static void commandAutoSave(openAiCtx *ctx, char *line) {
     openAiCtxSetFlags(ctx, OPEN_AI_FLAG_PERSIST);
 }
 
+int qsortAoStrCmp(const void *a, const void *b) {
+    return aoStrCmp(*(aoStr **)a, *(aoStr **)b);
+}
+
 static void commandModels(openAiCtx *ctx, char *line) {
     (void)line;
     json *resp = openAiListModels(ctx);
-    if (resp) {
-        json *data = jsonSelect(resp, ".data[*]:a");
 
+    aoStr *buffer, *tmp;
+    aoStr **arr = NULL;
+    int arrlen = 0;
+
+    if (resp) {
+        json *data = jsonSelect(resp, ".data:a");
         if (data) {
+            buffer = aoStrAlloc(2048);
+            data = jsonGetArray(data);
+
             for (json *tmp = data; tmp != NULL; tmp = tmp->next) {
                 json *id = jsonSelect(tmp, ".id:s");
+
                 if (id) {
-                    printf("%s\n", id->str);
+                    aoStrCat(buffer, id->str);
+                    aoStrPutChar(buffer, ',');
                 }
             }
+
+            arr = aoStrSplit(buffer->data, ',', &arrlen);
+            if (arr) {
+                qsort(arr, arrlen, sizeof(aoStr *), qsortAoStrCmp);
+                for (int i = 0; i < arrlen; ++i) {
+                    tmp = arr[i];
+                    if (tmp->len > 0) {
+                        printf("%s\n", tmp->data);
+                    }
+                }
+                aoStrArrayRelease(arr, arrlen);
+            }
+            aoStrRelease(buffer);
         }
     }
     jsonRelease(resp);
@@ -232,13 +262,6 @@ static void commandChatHistoryClear(openAiCtx *ctx, char *line) {
     openAiCtxHistoryClear(ctx);
 }
 
-static void commandPersist(openAiCtx *ctx, char *line) {
-    (void)line;
-    openAiCtxSetFlags(ctx, OPEN_AI_FLAG_PERSIST);
-    openAiCtxDbInit(ctx);
-    openAiCtxDbNewChat(ctx);
-}
-
 static void commandChatList(openAiCtx *ctx, char *line) {
     (void)line;
     int count = 0;
@@ -252,19 +275,19 @@ static void commandChatList(openAiCtx *ctx, char *line) {
 static void commandChatRename(openAiCtx *ctx, char *line) {
     char newname[BUFSIZ];
     ssize_t newlen = 0;
-    char *ptr;
+    char *ptr = line;
 
     if (!(ctx->flags & OPEN_AI_FLAG_PERSIST)) {
         warning("Please turn on OPEN_AI_FLAG_PERSIST to create a table entry and rename the chat\n");
         return;
     }
-    ptr = line;
+    
     if (!isspace(*ptr)) {
         warning("Usage: /chat-rename <name_of_chat>\n");
         return;
     }
-    ptr++;
-    ;
+
+    ptr++;    
     while (*ptr != '\0') {
         newname[newlen++] = *ptr++;
     }
@@ -323,7 +346,7 @@ static void commandChatHistoryDel(openAiCtx *ctx, char *line) {
         msg_idx = (int)strtol(ptr, &ok, 10);
         if (msg_idx != -1) {
             printf("%d\n", msg_idx);
-            openAiCtxHistoryDel(ctx,msg_idx);
+            openAiCtxHistoryDel(ctx, msg_idx);
         }
     }
 }
@@ -490,7 +513,6 @@ static dict *promptLoadCommands(void) {
 
 void promptMain(openAiCtx *ctx) {
     char *line, *ptr;
-    double num = 0.0;
     promptInit();
     dict *commands = promptLoadCommands();
     openAiCommand *command;
@@ -511,7 +533,7 @@ void promptMain(openAiCtx *ctx) {
             commandChat(ctx, line);
         } else if (line[0] != '\0' && line[0] == '/') {
             ptr += 1;
-            
+
             while (!isspace(*ptr) && *ptr != '\0') {
                 cmd[cmd_len++] = *ptr++;
             }

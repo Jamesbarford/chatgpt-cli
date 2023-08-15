@@ -37,7 +37,6 @@ typedef struct sqlPreparedStmt {
     int *params_type;
 } sqlPreparedStmt;
 
-/* We're only storing text so lets not be a hero */
 typedef struct sqlColumn {
     long len;
     int type;

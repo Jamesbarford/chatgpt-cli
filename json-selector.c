@@ -23,7 +23,7 @@
  * Get item from an array of json or return null
  */
 json *jsonArrayAt(json *j, int idx) {
-    if (!jsonIsArray(j) || idx < 0) {
+    if (!jsonIsArray(j) && idx < 0) {
         return NULL;
     }
 
@@ -174,7 +174,7 @@ json *jsonSelect(json *j, const char *fmt, ...) {
     va_start(ap, fmt);
     const char *ptr = fmt;
 
-    if (*ptr != '.') {
+    if (*ptr != '.' && *ptr != '[') {
         return NULL;
     }
 
