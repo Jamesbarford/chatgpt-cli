@@ -7,7 +7,7 @@
 - Set model parameters
 - Clear chat history, or a specific message
 
-N.B - Requires an [openai key](https://openai.com/blog/openai-api)
+*N.B* - Requires an [openai key](https://openai.com/blog/openai-api)
 
 ## Who is this for?
 If, like me, you spend a lot of time in the terminal perhaps use something like
