@@ -15,6 +15,19 @@ tmux to flip between different programs you'll probably get some mileage from
 this tool. It's like the web chatgpt interface except from the command line
 and with some additional benefits like deleting individual messages from history.
 
+## Compiling
+Run:
+```
+make
+```
+
+If you would like to install then run:
+
+```
+make install
+```
+
+
 ## Commands
 This has been taken directly from the /help command
 
