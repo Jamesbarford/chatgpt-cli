@@ -1,3 +1,9 @@
+/* Copyright (C) 2023 James W M Barford-Evans
+ * <jamesbarfordevans at gmail dot com>
+ * All Rights Reserved
+ *
+ * This code is released under the BSD 2 clause license.
+ * See the COPYING file for more information. */
 #ifndef PANIC_H
 #define PANIC_H
 

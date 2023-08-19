@@ -4,8 +4,8 @@
  *
  * This code is released under the BSD 2 clause license.
  * See the COPYING file for more information. */
-#ifndef __OPENAPI_H
-#define __OPENAPI_H
+#ifndef OPENAPI_H
+#define OPENAPI_H
 
 #include <stddef.h>
 
@@ -63,9 +63,8 @@ typedef struct openAiCtx {
 
     sqlCtx *db; /* Only exists if OPEN_AI_FLAG_PERSIST has been set */
 
-    openAiMessage *chat_history;
-    size_t chat_capacity;
-    size_t chat_len;
+    list *chat;
+    int chat_len;
     aoStr *tmp_buffer;
 } openAiCtx;
 
@@ -81,7 +80,7 @@ void openAiCtxSetPresencePenalty(openAiCtx *ctx, float presence_penalty);
 void openAiCtxSetMaxTokens(openAiCtx *ctx, size_t max_tokens);
 void openAiCtxSetTemperature(openAiCtx *ctx, float temperature);
 void openAiCtxSetTopP(openAiCtx *ctx, float top_p);
-void openAiCtxSetChatHistory(openAiCtx *ctx, openAiMessage *chat_history);
+void openAiCtxSetChatHistory(openAiCtx *ctx, list *chat);
 void openAiCtxSetChatLen(openAiCtx *ctx, size_t history_len);
 void openAiCtxSetFlags(openAiCtx *ctx, int flags);
 void openAiCtxHistoryPrint(openAiCtx *ctx);
@@ -102,5 +101,8 @@ void openAiCtxDbInsertMessage(openAiCtx *ctx, int role, aoStr *msg);
 void openAiCtxLoadChatHistoryById(openAiCtx *ctx, int chat_id);
 void openAiCtxDbSaveHistory(openAiCtx *ctx);
 int *openAiCtxDbGetChatIds(openAiCtx *ctx, int *count);
+list *openAiCtxGetChats(openAiCtx *ctx);
 
-#endif // !__OPENAPI_H
+void openAiCtxHistoryDel(openAiCtx *ctx, int msg_id);
+
+#endif // !OPENAPI_H

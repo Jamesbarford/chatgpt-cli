@@ -1,5 +1,11 @@
-#ifndef __SQL_H
-#define __SQL_H
+/* Copyright (C) 2023 James W M Barford-Evans
+ * <jamesbarfordevans at gmail dot com>
+ * All Rights Reserved
+ *
+ * This code is released under the BSD 2 clause license.
+ * See the COPYING file for more information. */
+#ifndef SQL_H
+#define SQL_H
 
 #include <sqlite3.h>
 #include <stdarg.h>
@@ -8,7 +14,7 @@
 #include "aostr.h"
 
 #define SQL_MAX_QUERY_PARAMS (64)
-#define SQL_DB_NAME          "chat-hist.db"
+#define SQL_DB_NAME          "chatgpt-hist.db"
 
 typedef enum SqlType {
     SQL_INT = SQLITE_INTEGER,
@@ -37,7 +43,6 @@ typedef struct sqlPreparedStmt {
     int *params_type;
 } sqlPreparedStmt;
 
-/* We're only storing text so lets not be a hero */
 typedef struct sqlColumn {
     long len;
     int type;
@@ -59,7 +64,6 @@ typedef struct sqlCtx {
     sqlite3 *conn;
     char *dbname;
 } sqlCtx;
-
 
 sqlCtx *sqlCtxNew(char *dbname);
 /* Unsafe */

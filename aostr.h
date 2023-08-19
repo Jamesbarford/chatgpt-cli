@@ -4,8 +4,8 @@
  *
  * This code is released under the BSD 2 clause license.
  * See the COPYING file for more information. */
-#ifndef __AOSTR_H
-#define __AOSTR_H
+#ifndef AOSTR_H
+#define AOSTR_H
 
 #include <stddef.h>
 
@@ -38,7 +38,6 @@ int aoStrMatchCharAt(aoStr *buf, char ch, size_t at);
 void aoStrSetCapacity(aoStr *buf, size_t capacity);
 size_t aoStrCapacity(aoStr *buf);
 int aoStrExtendBuffer(aoStr *buf, unsigned int additional);
-int aoStrExtendBufferIfNeeded(aoStr *buf, size_t additional);
 void aoStrToLowerCase(aoStr *buf);
 void aoStrToUpperCase(aoStr *buf);
 void aoStrPutChar(aoStr *buf, char ch);
@@ -54,7 +53,8 @@ aoStr *aoStrFromString(char *s, size_t len);
 aoStr *aoStrDupRaw(char *s, size_t len, size_t capacity);
 aoStr *aoStrDup(aoStr *buf);
 aoStr *aoStrMaybeDup(aoStr *buf);
-size_t aoStrWrite(aoStr *buf, char *s, size_t len);
+
+char *aoStrMove(aoStr *buf);
 
 void aoStrCatLen(aoStr *buf, const void *d, size_t len);
 void aoStrCat(aoStr *buf, const void *d);

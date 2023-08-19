@@ -5,6 +5,7 @@
  * This code is released under the BSD 2 clause license.
  * See the COPYING file for more information. */
 #include <errno.h>
+#include <pwd.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,12 +41,16 @@ list *openAiAuthHeaders(openAiCtx *ctx) {
     return headers;
 }
 
-static openAiMessage *openAiMessagesNew(int count) {
-    openAiMessage *msgs = (openAiMessage *)calloc(count, sizeof(openAiMessage));
-    if (msgs == NULL) {
-        return NULL;
+static void openAiMessageRelease(void *_msg) {
+    if (_msg) {
+        openAiMessage *msg = (openAiMessage *)_msg;
+        aoStrRelease(msg->content);
+        free(msg);
     }
-    return msgs;
+}
+
+static void openAiMessageListRelease(list *msgs) {
+    listRelease(msgs, openAiMessageRelease);
 }
 
 openAiCtx *openAiCtxNew(char *apikey, char *model, char *organisation) {
@@ -61,9 +66,8 @@ openAiCtx *openAiCtxNew(char *apikey, char *model, char *organisation) {
     ctx->auth_headers = openAiAuthHeaders(ctx);
 
     /* History */
-    ctx->chat_capacity = 10;
     ctx->chat_len = 0;
-    ctx->chat_history = openAiMessagesNew(ctx->chat_capacity);
+    ctx->chat = listNew();
 
     ctx->db = NULL;
 
@@ -90,57 +94,47 @@ void openAiCtxPrint(openAiCtx *ctx) {
 }
 
 void openAiCtxHistoryPrint(openAiCtx *ctx) {
-    for (size_t i = 0; i < ctx->chat_len; ++i) {
-        openAiMessage *msg = &ctx->chat_history[i];
+    list *node = ctx->chat->next;
+    openAiMessage *msg;
+    int i = 0;
+
+    while (node != ctx->chat) {
+        msg = (openAiMessage *)node->value;
         switch (msg->role) {
         case OPEN_AI_ROLE_USER:
-            printf("[user]: %s\n", msg->content->data);
+            printf("[%d] [user]: %s\n", i, msg->content->data);
             break;
         case OPEN_AI_ROLE_ASSISTANT:
-            printf("\033[0;32m[assistant]:\033[0m %s\n", msg->content->data);
+            printf("[%d] \033[0;32m[assistant]:\033[0m %s\n", i,
+                   msg->content->data);
             break;
         case OPEN_AI_ROLE_SYSTEM:
-            printf("\033[0;36m[system]:\033[0m %s\n", msg->content->data);
+            printf("[%d] \033[0;36m[system]:\033[0m %s\n", i,
+                   msg->content->data);
             break;
         case OPEN_AI_ROLE_FUNCTION:
-            printf("[function]: %s\n", msg->content->data);
+            printf("[%d] [function]: %s\n", i, msg->content->data);
             break;
         }
+        node = node->next;
+        i++;
     }
 }
 
 void openAiCtxHistoryClear(openAiCtx *ctx) {
-    if (ctx->chat_len == 0) {
-        return;
-    }
-    for (size_t i = 0; i < ctx->chat_len; ++i) {
-        openAiMessage *msg = &ctx->chat_history[i];
-        aoStrRelease(msg->content);
-    }
-    free(ctx->chat_history);
+    openAiMessageListRelease(ctx->chat);
+    ctx->chat = listNew();
     ctx->chat_len = 0;
-    ctx->chat_capacity = 10;
-    ctx->chat_history = (openAiMessage *)malloc(sizeof(openAiMessage) *
-                                                ctx->chat_capacity);
 }
 
 void openAiChatHistoryAppend(openAiCtx *ctx, int role, char *name,
                              aoStr *data) {
-    openAiMessage *msgs = ctx->chat_history;
-    if (ctx->chat_len + 1 >= ctx->chat_capacity) {
-        msgs = realloc(msgs, sizeof(openAiMessage) * ctx->chat_capacity * 2);
-        if (msgs != NULL) {
-            ctx->chat_capacity *= 2;
-            ctx->chat_history = msgs;
-        } else {
-            warning("Possible OOM: Cannot add more history to chat: %s\n",
-                    strerror(errno));
-        }
-    }
-    openAiMessage *msg = &msgs[ctx->chat_len++];
+    openAiMessage *msg = malloc(sizeof(openAiMessage));
     msg->name = name;
     msg->role = role;
     msg->content = data;
+    listAppend(ctx->chat, msg);
+    ctx->chat_len++;
 }
 
 void openAiCtxRelease(openAiCtx *ctx) {
@@ -152,8 +146,8 @@ void openAiCtxRelease(openAiCtx *ctx) {
         free(ctx->organisation);
     }
     free(ctx->model);
-    free(ctx->chat_history);
     listRelease(ctx->auth_headers, (void (*)(void *))aoStrRelease);
+    openAiMessageListRelease(ctx->chat);
     free(ctx);
 }
 
@@ -191,8 +185,8 @@ void openAiCtxSetTopP(openAiCtx *ctx, float top_p) {
     ctx->top_p = top_p;
 }
 
-void openAiCtxSetChatHistory(openAiCtx *ctx, openAiMessage *chat_history) {
-    ctx->chat_history = chat_history;
+void openAiCtxSetChatHistory(openAiCtx *ctx, list *chat) {
+    ctx->chat = chat;
 }
 
 void openAiCtxSetChatLen(openAiCtx *ctx, size_t history_len) {
@@ -225,10 +219,14 @@ static void openAiAppendOptionsToPayload(openAiCtx *ctx, aoStr *payload,
     if (ctx->flags & OPEN_AI_FLAG_HISTORY) {
         /* This can be optimised, by maintaining a string */
         aoStrCatLen(payload, ",\"messages\": [", 14);
-        for (size_t i = 0; i < ctx->chat_len; ++i) {
-            openAiMessage *msg = &ctx->chat_history[i];
+        openAiMessage *msg;
+        list *node = ctx->chat->next;
+
+        while (node != ctx->chat) {
+            msg = node->value;
             aoStrCatPrintf(payload, "{\"role\": \"%s\", \"content\": \"%s\"},",
                            role_to_str[msg->role], aoStrGetData(msg->content));
+            node = node->next;
         }
     }
     aoStrCatPrintf(payload, "{\"role\": \"%s\", \"content\": \"%s\"}]",
@@ -237,7 +235,16 @@ static void openAiAppendOptionsToPayload(openAiCtx *ctx, aoStr *payload,
 
 void openAiCtxDbInit(openAiCtx *ctx) {
     if (ctx->db == NULL) {
-        ctx->db = sqlCtxNew(SQL_DB_NAME);
+        struct passwd *pw = getpwuid(getuid());
+
+        if (pw == NULL) {
+            panic("Could not get pwd for user\n");
+        }
+        aoStr *db_name = aoStrAlloc(512);
+        aoStrCatPrintf(db_name, "/%s/.%s", pw->pw_dir, SQL_DB_NAME);
+
+        ctx->db = sqlCtxNew(aoStrMove(db_name));
+
         char *sql =
                 "CREATE TABLE IF NOT EXISTS chat(id INTEGER PRIMARY KEY AUTOINCREMENT,"
                 "name TEXT,"
@@ -258,9 +265,15 @@ void openAiCtxDbInit(openAiCtx *ctx) {
 
 void openAiCtxDbSaveHistory(openAiCtx *ctx) {
     /* I do know how to concatinate a string */
-    for (size_t i = 0; i < ctx->chat_len; ++i) {
-        openAiMessage *msg = &ctx->chat_history[i];
-        openAiCtxDbInsertMessage(ctx, msg->role, msg->content);
+    if (ctx->chat_len > 0) {
+        list *node = ctx->chat->next;
+        openAiMessage *msg;
+
+        while (node != ctx->chat) {
+            msg = (openAiMessage *)node->value;
+            openAiCtxDbInsertMessage(ctx, msg->role, msg->content);
+            node = node->next;
+        }
     }
 }
 
@@ -283,8 +296,8 @@ void openAiCtxDbNewChat(openAiCtx *ctx) {
 
 void openAiCtxDbRenameChat(openAiCtx *ctx, int id, char *name) {
     sqlParam params[2] = {
-            {.type = SQL_INT, .integer = id},
             {.type = SQL_TEXT, .str = name},
+            {.type = SQL_INT, .integer = id},
     };
     sqlQuery(ctx->db, "UPDATE chat SET name = ? WHERE id = ?;", params, 2);
 }
@@ -294,13 +307,6 @@ void openAiCtxDbDeleteChatById(openAiCtx *ctx, int id) {
             {.type = SQL_INT, .integer = id},
     };
     sqlQuery(ctx->db, "DELETE FROM chat WHERE id = ?", params, 1);
-}
-
-void openAiCtxDbDeleteChatByName(openAiCtx *ctx, char *name) {
-    sqlParam params[1] = {
-            {.type = SQL_TEXT, .str = name},
-    };
-    sqlQuery(ctx->db, "DELETE FROM chat WHERE name = ?", params, 1);
 }
 
 void openAiCtxDbDeleteMessageById(openAiCtx *ctx, int id) {
@@ -321,11 +327,11 @@ void openAiCtxDbInsertMessage(openAiCtx *ctx, int role, aoStr *msg) {
              params, 3);
 }
 
-openAiMessage *openAiDbGetMessagesByChatId(openAiCtx *ctx, int chat_id,
-                                           int *count) {
+list *openAiDbGetMessagesByChatId(openAiCtx *ctx, int chat_id, int *count) {
     sqlRow row;
-    int i = 0, cap = 10;
-    openAiMessage *msgs = NULL, *msg;
+    list *chat = listNew();
+    int i = 0;
+    openAiMessage *msg;
     sqlParam params[1] = {
             {.type = SQL_INT, .integer = chat_id},
     };
@@ -337,36 +343,51 @@ openAiMessage *openAiDbGetMessagesByChatId(openAiCtx *ctx, int chat_id,
         return NULL;
     }
 
-    msgs = (openAiMessage *)malloc(sizeof(openAiMessage) * cap);
-
     while (sqlIter(&row)) {
-        if (i + 1 >= cap) {
-            msgs = realloc(msgs, sizeof(openAiMessage) * cap * 2);
-            cap *= 2;
-        }
-        msg = &msgs[i++];
+        msg = (openAiMessage *)malloc(sizeof(openAiMessage));
         msg->role = row.col[0].integer;
         msg->content = aoStrDupRaw(row.col[1].str, row.col[1].len,
                                    row.col[1].len);
+        listAppend(chat, msg);
     }
     *count = i;
 
-    return msgs;
+    return chat;
 }
 
 void openAiCtxLoadChatHistoryById(openAiCtx *ctx, int chat_id) {
     int count = 0;
-    openAiMessage *msgs = openAiDbGetMessagesByChatId(ctx, chat_id, &count);
+    list *msgs = openAiDbGetMessagesByChatId(ctx, chat_id, &count);
     if (!msgs) {
         return;
     }
-    if (ctx->chat_history != NULL) {
-        free(ctx->chat_history);
+    if (ctx->chat_len > 0) {
+        openAiMessageListRelease(ctx->chat);
     }
+    ctx->chat = msgs;
     ctx->chat_id = chat_id;
     ctx->chat_len = count;
-    ctx->chat_capacity = count;
-    ctx->chat_history = msgs;
+}
+
+list *openAiCtxGetChats(openAiCtx *ctx) {
+    list *chats = listNew();
+    sqlRow row;
+
+    sqlSelect(ctx->db, &row, "SELECT id, name from chat ORDER BY id;", NULL, 0);
+
+    while (sqlIter(&row)) {
+        int id = row.col[0].integer;
+        char *name = "(null)";
+        if (row.col[1].type == SQL_TEXT) {
+            name = row.col[1].str;
+        }
+
+        aoStr *buf = aoStrAlloc(128);
+        aoStrCatPrintf(buf, "[%d] %s", id, name);
+        listAppend(chats, buf);
+    }
+
+    return chats;
 }
 
 int *openAiCtxDbGetChatIds(openAiCtx *ctx, int *count) {
@@ -384,6 +405,23 @@ int *openAiCtxDbGetChatIds(openAiCtx *ctx, int *count) {
     }
     *count = i;
     return arr;
+}
+
+void openAiCtxHistoryDel(openAiCtx *ctx, int msg_id) {
+    int i = 0;
+    list *node = ctx->chat->next;
+    while (node != ctx->chat) {
+        if (i == msg_id && node->value) {
+            node->prev->next = node->next;
+            node->next->prev = node->prev;
+            openAiMessageRelease(node->value);
+            free(node);
+            ctx->chat_len--;
+            return;
+        }
+        i++;
+        node = node->next;
+    }
 }
 
 /*
@@ -446,8 +484,9 @@ static size_t openAiChatStreamCallback(char *stream, size_t size, size_t nmemb,
             j = jsonParseWithLen(ptr, rbytes - (stream - ptr));
             if (!j) {
                 warning("Failed to Parse JSON\n");
-            } else if (j && j->state) {
+            } else if (!jsonOk(j)) {
                 warning("Failed to Parse JSON");
+                jsonPrint(j);
                 jsonPrintError(j);
             }
 
@@ -472,6 +511,7 @@ static size_t openAiChatStreamCallback(char *stream, size_t size, size_t nmemb,
                 }
 
                 jsonPrint(j);
+                jsonRelease(j);
             }
         }
         ptr++;

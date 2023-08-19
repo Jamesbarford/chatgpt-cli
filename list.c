@@ -12,6 +12,7 @@
 list *listNew(void) {
     list *l = (list *)malloc(sizeof(list));
     l->prev = l->next = l;
+    l->value = NULL;
     return l;
 }
 
