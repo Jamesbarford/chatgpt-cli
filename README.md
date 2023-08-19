@@ -5,7 +5,7 @@
 - SQLite3 for persistence between sessions - opt in, off by default
 - System prompts
 - Set model parameters
-- Clear chat history / or a specific message
+- Clear chat history, or a specific message
 
 N.B - Requires an [openai key](https://openai.com/blog/openai-api)
 
@@ -45,3 +45,7 @@ This has been taken directly from the /help command
 /exit - Exits program
 /help - Displays this message
 ```
+
+## Libraries used
+- [linenoise](https://github.com/antirez/linenoise) A smaller replacement for readline
+- [easy-json](https://github.com/Jamesbarford/easy-json) User friendly and fast JSON parser
