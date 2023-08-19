@@ -1,10 +1,16 @@
+/* Copyright (C) 2023 James W M Barford-Evans
+ * <jamesbarfordevans at gmail dot com>
+ * All Rights Reserved
+ *
+ * This code is released under the BSD 2 clause license.
+ * See the COPYING file for more information. */
 #include <assert.h>
 #include <ctype.h>
 #include <errno.h>
+#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <pwd.h>
 #include <unistd.h>
 
 #include "aostr.h"
@@ -47,31 +53,31 @@ static void commandSetTemperature(openAiCtx *ctx, char *line);
 
 static openAiCommand readonly_command[] = {
         {"", commandChat},
-        {"save", commandSave},
-        {"autosave", commandAutoSave},
-        {"models", commandModels},
-        {"info", commandInfo},
+        {"/save", commandSave},
+        {"/autosave", commandAutoSave},
+        {"/models", commandModels},
+        {"/info", commandInfo},
 
-        {"system", commandSystem},
-        {"file", commandChatFile},
+        {"/system", commandSystem},
+        {"/file", commandChatFile},
 
-        {"hist-list", commandChatHistoryList},
-        {"hist-del", commandChatHistoryDel},
-        {"hist-clear", commandChatHistoryClear},
+        {"/hist-list", commandChatHistoryList},
+        {"/hist-del", commandChatHistoryDel},
+        {"/hist-clear", commandChatHistoryClear},
 
-        {"chat-load", commandChatLoad},
-        {"chat-list", commandChatList},
-        {"chat-rename", commandChatRename},
-        {"chat-del", commandChatDel},
+        {"/chat-load", commandChatLoad},
+        {"/chat-list", commandChatList},
+        {"/chat-rename", commandChatRename},
+        {"/chat-del", commandChatDel},
 
-        {"set-model", commandSetModel},
-        {"set-verbose", commandSetVerbose},
-        {"set-top_p", commandSetTopP},
-        {"set-presence-pen", commandSetPresencePenalty},
-        {"set-temperature", commandSetTemperature},
+        {"/set-model", commandSetModel},
+        {"/set-verbose", commandSetVerbose},
+        {"/set-top_p", commandSetTopP},
+        {"/set-presence-pen", commandSetPresencePenalty},
+        {"/set-temperature", commandSetTemperature},
 
-        {"exit", commandExit},
-        {"help", commandHelp},
+        {"/exit", commandExit},
+        {"/help", commandHelp},
 };
 
 #define MAX_COMPLETIONS 10
@@ -86,36 +92,59 @@ typedef struct {
 
 // Define the array of structs
 cliCommandInfo cli_info[] = {
-    {"/save", "/sa", " /save", {"/save"}, 1},
-    {"/autosave", "/autos", " /autosave", {"/autosave"}, 1},
-    {"/models", "/mod", " /models", {"/models"}, 1},
-    {"/info", "/in", " /info", {"/info"}, 1},
-    {"/system", "/sys", " /system <prompt>", {"/system"}, 1},
-    {"/file", "/fi", " /file <file_path> <prompt>", {"/file"}, 1},
+        {"/save", "/sa", " /save", {"/save"}, 1},
+        {"/autosave", "/autos", " /autosave", {"/autosave"}, 1},
+        {"/models", "/mod", " /models", {"/models"}, 1},
+        {"/info", "/in", " /info", {"/info"}, 1},
+        {"/system", "/sys", " /system <prompt>", {"/system"}, 1},
+        {"/file", "/fi", " /file <file_path> <prompt>", {"/file"}, 1},
 
-    {"/hist-list", "/hist-li", " /hist-list", {"/hist-list"}, 1},
-    {"/hist-clear", "/hist-cl", " /hist-clear", {"/hist-clear"}, 1},
-    {"/hist-del", "/hist-de", " /hist-del <id>", {"/hist-del"}, 1},
-    {"/hist", "/hist", " /hist-<list | del | clear>", {"/hist-list", "/hist-del", "/hist-clear"}, 3},
+        {"/hist-list", "/hist-li", " /hist-list", {"/hist-list"}, 1},
+        {"/hist-clear", "/hist-cl", " /hist-clear", {"/hist-clear"}, 1},
+        {"/hist-del", "/hist-de", " /hist-del <id>", {"/hist-del"}, 1},
+        {"/hist",
+         "/hist",
+         " /hist-<list | del | clear>",
+         {"/hist-list", "/hist-del", "/hist-clear"},
+         3},
 
-    {"/chat-list", "/chat-li", " /chat-list", {"/chat-list"}, 1},
-    {"/chat-load", "/chat-lo", " /chat-load <id>", {"/chat-load"}, 1},
-    {"/chat-del", "/chat-de", " /chat-del <id>", {"/chat-del"}, 1},
-    {"/chat-rename", "/chat-re", " /chat-rename <id> <name>", {"/chat-rename"}, 1},
-    {"/chat", "/chat", " /chat-<load | list | rename | del>", {"/chat-load", "/chat-list", "/chat-rename", "/chat-del"}, 4},
+        {"/chat-list", "/chat-li", " /chat-list", {"/chat-list"}, 1},
+        {"/chat-load", "/chat-lo", " /chat-load <id>", {"/chat-load"}, 1},
+        {"/chat-del", "/chat-de", " /chat-del <id>", {"/chat-del"}, 1},
+        {"/chat-rename",
+         "/chat-re",
+         " /chat-rename <id> <name>",
+         {"/chat-rename"},
+         1},
+        {"/chat",
+         "/chat",
+         " /chat-<load | list | rename | del>",
+         {"/chat-load", "/chat-list", "/chat-rename", "/chat-del"},
+         4},
 
-    {"/set-model", "/set-m", " /set-model <model_id>", {"/set-model"}, 1},
-    {"/set-verbose", "/set-v", " /set-verbose <1|0>", {"/set-verbose"}, 1},
-    {"/set-top_p", "/set-to", " /set-top_p <float>", {"/set-top_p"}, 1},
-    {"/set-presence-pen", "/set-pr", " /set-presence-pen <float>", {"/set-presence-pen"}, 1},
-    {"/set-temperature", "/set-te", " /set-temperature <float>", {"/set-temperature"}, 1},
-    {"/set", "/set", " /set-<model | verbose | top_p | presence-pen | temperature>", {"/set-model", "/set-verbose", "/set-top_p", "/set-presence-pen", "/set-temperature"}, 5},
+        {"/set-model", "/set-m", " /set-model <model_id>", {"/set-model"}, 1},
+        {"/set-verbose", "/set-v", " /set-verbose <1|0>", {"/set-verbose"}, 1},
+        {"/set-top_p", "/set-to", " /set-top_p <float>", {"/set-top_p"}, 1},
+        {"/set-presence-pen",
+         "/set-pr",
+         " /set-presence-pen <float>",
+         {"/set-presence-pen"},
+         1},
+        {"/set-temperature",
+         "/set-te",
+         " /set-temperature <float>",
+         {"/set-temperature"},
+         1},
+        {"/set",
+         "/set",
+         " /set-<model | verbose | top_p | presence-pen | temperature>",
+         {"/set-model", "/set-verbose", "/set-top_p", "/set-presence-pen",
+          "/set-temperature"},
+         5},
 
-    {"/exit", "/ex", " /exit", {"/exit"}, 1},
-    {"/help", "/he", " /help", {"/help"}, 1},
+        {"/exit", "/ex", " /exit", {"/exit"}, 1},
+        {"/help", "/he", " /help", {"/help"}, 1},
 };
-
-
 
 static void commandChat(openAiCtx *ctx, char *line) {
     ssize_t len = 0;
@@ -227,7 +256,7 @@ static void commandChatFile(openAiCtx *ctx, char *line) {
         path[pathlen++] = *ptr++;
     }
     if (!isspace(*ptr)) {
-        prompt_warning("Usage: /chatf <file> <cmd>\n");
+        prompt_warning("Usage: /file <file> <cmd>\n");
         return;
     }
     ptr++;
@@ -262,7 +291,7 @@ static void commandChatList(openAiCtx *ctx, char *line) {
     aoStr *buf = NULL;
 
     while (node != chats) {
-        buf = node->value;        
+        buf = node->value;
         next = node->next;
         printf("%s\n", buf->data);
         aoStrRelease(buf);
@@ -287,33 +316,39 @@ static void commandChatDel(openAiCtx *ctx, char *line) {
     while (isdigit(*ptr)) {
         id = id * 10 + *ptr - '0';
     }
-    openAiCtxDbDeleteChatById(ctx,id);
+    openAiCtxDbDeleteChatById(ctx, id);
 }
 
 static void commandChatRename(openAiCtx *ctx, char *line) {
-    char newname[BUFSIZ];
-    ssize_t newlen = 0;
-    char *ptr = line;
-    int id = 0;
+    char *bookend = NULL;
+    int arrlen = 0;
+    aoStr **commands = aoStrSplit(line, ' ', &arrlen);
+    aoStr *name;
 
-    if (!isspace(*ptr)) {
+    if (commands == NULL || arrlen < 2) {
         warning("Usage: /chat-rename <id> <name_of_chat>\n");
+        aoStrArrayRelease(commands, arrlen);
         return;
     }
 
-    ptr++;
-    while (isdigit(*ptr)) {
-        id = id * 10 + *ptr - '0';
-    }
-    if (!isspace(*ptr)) {
-        warning("Usage: /chat-rename <id> <name_of_chat>\n");
+    aoStr *str_int = commands[0];
+    int id = (int)strtol(str_int->data, &bookend, 10);
+
+    if (*bookend != '\0') {
+        warning("/chat-rename failed to parse id as an int\n");
+        aoStrArrayRelease(commands, arrlen);
         return;
     }
-    while (*ptr != '\0') {
-        newname[newlen++] = *ptr++;
+
+    name = aoStrAlloc(512);
+    for (int i = 1; i < arrlen; ++i) {
+        aoStrCatLen(name, commands[i]->data, commands[i]->len);
+        aoStrPutChar(name, ' ');
     }
-    newname[newlen] = '\0';
-    openAiCtxDbRenameChat(ctx, id, newname);
+
+    openAiCtxDbRenameChat(ctx, id, name->data);
+    aoStrArrayRelease(commands, arrlen);
+    aoStrRelease(name);
 }
 
 /* Can load a chat from the database without saving subsequent messages to that
@@ -413,12 +448,10 @@ static void commandHelp(openAiCtx *ctx, char *line) {
             "  hist-del <msg_idx> - Delete a specific message from memory\n");
     fprintf(stderr,
             "  hist-clear - Clear all history from memory, but not SQLite3\n");
-    fprintf(stderr,
-            "  chat-list - List chats saved in database\n");
+    fprintf(stderr, "  chat-list - List chats saved in database\n");
     fprintf(stderr,
             "  chat-load <id> - Load a previously saved chat from database\n");
-    fprintf(stderr,
-            "  chat-del <id> - Delete a chat from database\n");
+    fprintf(stderr, "  chat-del <id> - Delete a chat from database\n");
     fprintf(stderr,
             "  chat-rename <id> <name> - Rename a chat with id <id> to <name> in database\n");
 
@@ -587,7 +620,7 @@ void cliMain(openAiCtx *ctx) {
     int cmd_len = 0;
 
     history_filepath = aoStrAlloc(256);
-    aoStrCatPrintf(history_filepath,"%s/.chatgpt-cli-hist.txt",pw->pw_dir);
+    aoStrCatPrintf(history_filepath, "%s/.chatgpt-cli-hist.txt", pw->pw_dir);
     cliInit(history_filepath->data);
 
     while (1) {
@@ -599,12 +632,10 @@ void cliMain(openAiCtx *ctx) {
         ptr = line;
 
         if (line[0] != '\0' && line[0] != '/') {
-            linenoiseHistoryAdd(line);           /* Add to the history. */
-            linenoiseHistorySave(history_filepath->data); /* Save the history on disk. */
+            linenoiseHistoryAdd(line);
+            linenoiseHistorySave(history_filepath->data);
             commandChat(ctx, line);
         } else if (line[0] != '\0' && line[0] == '/') {
-            ptr += 1;
-
             while (!isspace(*ptr) && *ptr != '\0') {
                 cmd[cmd_len++] = *ptr++;
             }
@@ -615,6 +646,8 @@ void cliMain(openAiCtx *ctx) {
                 warning("Command: %s not found\n", ptr);
             } else {
                 command->commandHandler(ctx, ptr);
+                linenoiseHistoryAdd(line);
+                linenoiseHistorySave(history_filepath->data);
             }
         }
         free(line);

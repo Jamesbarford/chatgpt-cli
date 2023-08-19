@@ -296,8 +296,8 @@ void openAiCtxDbNewChat(openAiCtx *ctx) {
 
 void openAiCtxDbRenameChat(openAiCtx *ctx, int id, char *name) {
     sqlParam params[2] = {
-            {.type = SQL_INT, .integer = id},
             {.type = SQL_TEXT, .str = name},
+            {.type = SQL_INT, .integer = id},
     };
     sqlQuery(ctx->db, "UPDATE chat SET name = ? WHERE id = ?;", params, 2);
 }
@@ -307,13 +307,6 @@ void openAiCtxDbDeleteChatById(openAiCtx *ctx, int id) {
             {.type = SQL_INT, .integer = id},
     };
     sqlQuery(ctx->db, "DELETE FROM chat WHERE id = ?", params, 1);
-}
-
-void openAiCtxDbDeleteChatByName(openAiCtx *ctx, char *name) {
-    sqlParam params[1] = {
-            {.type = SQL_TEXT, .str = name},
-    };
-    sqlQuery(ctx->db, "DELETE FROM chat WHERE name = ?", params, 1);
 }
 
 void openAiCtxDbDeleteMessageById(openAiCtx *ctx, int id) {

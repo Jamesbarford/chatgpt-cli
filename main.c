@@ -27,17 +27,17 @@ char *getApiKey(void) {
     char *apikey = NULL;
     int fd;
 
-    if ((apikey = getenv("OPEN_API_KEY")) != NULL) {
+    if ((apikey = getenv("OPENAI_API_KEY")) != NULL) {
         return apikey;
     }
 
     if ((fd = open(".env", O_RDONLY, 0666)) == -1) {
-        panic("Failed to read .env file and OPEN_API_KEY was not set as an environment variable\n");
+        panic("Failed to read .env file and OPENAI_API_KEY was not set as an environment variable\n");
     }
 
     off_t len = lseek(fd, 0, SEEK_END);
     if (len == 0) {
-        panic("Failed to read .env file and get OPEN_API_KEY, file has no contents\n");
+        panic("Failed to read .env file and get OPENAI_API_KEY, file has no contents\n");
     }
 
     lseek(fd, 0, SEEK_SET);
