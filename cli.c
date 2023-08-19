@@ -1,8 +1,11 @@
 #include <assert.h>
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <pwd.h>
+#include <unistd.h>
 
 #include "aostr.h"
 #include "dict.h"
@@ -550,8 +553,8 @@ static void cliCompletionCallback(const char *buf, linenoiseCompletions *lc) {
     }
 }
 
-static void cliInit(void) {
-    linenoiseHistoryLoad("history.txt"); /* Load the history at startup */
+static void cliInit(char *filepath) {
+    linenoiseHistoryLoad(filepath); /* Load the history at startup */
     linenoiseSetCompletionCallback(cliCompletionCallback);
     linenoiseSetHintsCallback(cliHintsCallback);
     linenoiseSetMultiLine(1);
@@ -571,11 +574,21 @@ static dict *cliLoadCommands(void) {
 
 void cliMain(openAiCtx *ctx) {
     char *line, *ptr;
-    cliInit();
+    aoStr *history_filepath;
+    struct passwd *pw = getpwuid(getuid());
+
+    if (pw == NULL) {
+        panic("could not get current working directory: %s\n", strerror(errno));
+    }
+
     dict *commands = cliLoadCommands();
     openAiCommand *command;
     char cmd[128];
     int cmd_len = 0;
+
+    history_filepath = aoStrAlloc(256);
+    aoStrCatPrintf(history_filepath,"%s/.chatgpt-cli-hist.txt",pw->pw_dir);
+    cliInit(history_filepath->data);
 
     while (1) {
         line = linenoise(">>> ");
@@ -587,7 +600,7 @@ void cliMain(openAiCtx *ctx) {
 
         if (line[0] != '\0' && line[0] != '/') {
             linenoiseHistoryAdd(line);           /* Add to the history. */
-            linenoiseHistorySave("history.txt"); /* Save the history on disk. */
+            linenoiseHistorySave(history_filepath->data); /* Save the history on disk. */
             commandChat(ctx, line);
         } else if (line[0] != '\0' && line[0] == '/') {
             ptr += 1;
