@@ -53,6 +53,7 @@ char *getApiKey(void) {
         apikey[len - 1] = '\0';
     }
 
+    close(fd);
     return apikey;
 }
 
